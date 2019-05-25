@@ -12,6 +12,8 @@ number PartitionStyle
 Get-Disk | where PartitionStyle -eq 'raw' | Initialize-Disk
 or
 Initialize-Disk -Number 2
+or
+Initialize-Disk -Number 3 -PartitionStyle GPT 
 
 Create new partition:
 New-Partition -DiskNumber 2 -Size 10gb -AssignDriveLetter
@@ -47,3 +49,141 @@ Invoke-Command -ScriptBlock
    Format-Volume -FileSystem ReFS
 
 } -ComputerName server1
+
+=================================== Create new storage pool ===================================
+
+$disks = Get-StoragePool -IsPrimordial $true | Get-PhysicalDisk | Where-Object canpool -eq $true
+[server2]: PS C:\> $disks
+
+FriendlyName      SerialNumber CanPool OperationalStatus HealthStatus Usage        Size
+------------      ------------ ------- ----------------- ------------ -----        ----
+Msft Virtual Disk              True    OK                Healthy      Auto-Select 20 GB
+Msft Virtual Disk              True    OK                Healthy      Auto-Select 20 GB
+
+$storageSubsystem = Get-StorageSubSystem 
+
+[server2]: PS C:\> $storageSubsystem
+
+FriendlyName               HealthStatus OperationalStatus
+------------               ------------ -----------------
+Windows Storage on SERVER2 Healthy      OK 
+
+
+New-StoragePool -FriendlyName MoviesStoragePool -StorageSubSystemFriendlyName $storageSubsystem.FriendlyName -PhysicalDisks $disks
+
+FriendlyName      OperationalStatus HealthStatus IsPrimordial IsReadOnly
+------------      ----------------- ------------ ------------ ----------
+MoviesStoragePool OK                Healthy      False        False     
+
+New-VirtualDisk -FriendlyName MoviesVirtualDisk -StoragePoolFriendlyName MoviesStoragePool -ResiliencySettingName Mirror -ProvisioningType Fixed -NumberOfDataCopies 2 -UseMaximumSize
+
+FriendlyName      ResiliencySettingName OperationalStatus HealthStatus IsManualAttach  Size
+------------      --------------------- ----------------- ------------ --------------  ----
+MoviesVirtualDisk Mirror                OK                Healthy      False          18 GB
+
+
+
+Get-VirtualDisk -FriendlyName MoviesVirtualDisk | Get-Disk | Initialize-Disk -PassThru | New-Partition -AssignDriveLetter -UseMaximumSize | Format-Volume -FileSystem NTFS
+
+DriveLetter FileSystemLabel FileSystem DriveType HealthStatus OperationalStatus SizeRemaining     Size
+----------- --------------- ---------- --------- ------------ ----------------- -------------     ----
+D                           NTFS       Fixed     Healthy      OK                     17.81 GB 17.87 GB
+
+
+SMB
+
+[server2]: PS C:\> Get-SmbShare
+
+Name    ScopeName Path       Description  
+----    --------- ----       -----------  
+A$      *         A:\        Default share
+ADMIN$  *         C:\Windows Remote Admin 
+C$      *         C:\        Default share
+D$      *         D:\        Default share
+Finance *         D:\Finance              
+IPC$    *                    Remote IPC   
+
+
+New-SmbShare -Name Finance2 -Path E:\Finance -FolderEnumerationMode AccessBased
+Name     ScopeName Path       Description
+----     --------- ----       -----------
+Finance2 *         E:\Finance       
+
+
+Remove-SmbShare -Name finance
+
+
+=================================== Setting up Server to Server storage replication ===================================
+
+PS C:\> Invoke-Command -ScriptBlock {
+
+ Install-WindowsFeature -Name Storage-replica, fs-fileserver -IncludeManagementTools -Restart
+
+} -ComputerName Server1, Server2
+
+PS C:\> New-SRPartnership -SourceComputerName SERVER1 -SourceRGName REPLICATION-GROUP-NAME-1 -SourceVolumeName D: -SourceLogVolumeName E: -DestinationComputerName SERVER2 -DestinationRGName REPLICATION-GROUP-NAME-2 -DestinationVolumeName D: -DestinationLogVolumeName E:
+
+DestinationComputerName : SERVER2
+DestinationRGName       : REPLICATION-GROUP-NAME-2
+Id                      : d2b4a749-9a00-49da-99a9-8dbd6711c014
+SourceComputerName      : SERVER1
+SourceRGName            : REPLICATION-GROUP-NAME-1
+PSComputerName          : 
+
+
+Get-SRGroup
+
+AllowVolumeResize  : False
+AsyncRPO           : 
+ComputerName       : SERVER2
+Description        :  
+Id                 : fdd552da-030d-4d03-a0cc-99187ca2bc78
+IsAutoFailover     : 
+IsCluster          : False
+IsEncrypted        : False
+IsInPartnership    : True
+IsPrimary          : False
+IsSuspended        : False
+IsWriteConsistency : False
+LastInSyncTime     : 25/05/2019 04:06:39
+LogSizeInBytes     : 8589934592
+LogVolume          : E:\
+Name               : REPLICATION-GROUP-NAME-2
+NumOfReplicas      : 1
+Partitions         : {de4da788-672d-4622-918a-53eb24614321}
+Replicas           : {MSFT_WvrReplica (PartitionId = "de4da788-672d-4622-918a-53eb24614321")}
+ReplicationMode    : Synchronous
+ReplicationStatus  : ContinuouslyReplicating
+PSComputerName     : 
+
+
+
+[server2]: PS C:\> Get-SRPartnership
+
+
+DestinationComputerName : SERVER2
+DestinationRGName       : REPLICATION-GROUP-NAME-2
+Id                      : d2b4a749-9a00-49da-99a9-8dbd6711c014
+SourceComputerName      : SERVER1
+SourceRGName            : REPLICATION-GROUP-NAME-1
+PSComputerName          : 
+
+[server2]: PS C:\> (Get-SRGroup).replicas
+
+
+CurrentLsn          : 9
+DataVolume          : D:\
+LastInSyncTime      : 25/05/2019 04:06:39
+LastKnownPrimaryLsn : 9
+LastOutOfSyncTime   : 
+NumOfBytesRecovered : 169869448
+NumOfBytesRemaining : 0
+PartitionId         : de4da788-672d-4622-918a-53eb24614321
+PartitionSize       : 21338521600
+ReplicationMode     : Synchronous
+ReplicationStatus   : ContinuouslyReplicating
+PSComputerName      : 
+
+--------------------------Swap the source with destination servers!!!
+[server2]: PS C:\> Set-SRPartnership -NewSourceComputerName SERVER2 -SourceRGName REPLICATION-GROUP-NAME-2 -DestinationComputerName SERVER1 -DestinationRGName REPLICATION-GROUP-NAME-1
+
