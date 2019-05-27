@@ -1,5 +1,9 @@
 Storage Solutions - Win Server 2016
 
+Get all installed features:
+
+Get-WindowsFeature | Where-Object {$_. InstallState -eq "installed"} | ft name, installstate
+
 Powershell commands:
 
 Get-Disk | Select-Object number, partitionstyle
@@ -187,3 +191,111 @@ PSComputerName      :
 --------------------------Swap the source with destination servers!!!
 [server2]: PS C:\> Set-SRPartnership -NewSourceComputerName SERVER2 -SourceRGName REPLICATION-GROUP-NAME-2 -DestinationComputerName SERVER1 -DestinationRGName REPLICATION-GROUP-NAME-1
 
+
+|--------------------------| Deduplication Server |--------------------------|
+
+[SERVER1]: PS C:\> Get-DedupJob
+
+Type               ScheduleType       StartTime              Progress   State                  Volume                          
+----               ------------       ---------              --------   -----                  ------                          
+Optimization       Manual             01:17                  100 %      Completed              d:        
+
+Start new job...
+
+
+[SERVER1]: PS C:\> Start-DedupJob -Type Optimization -Volume d: -Memory 100
+
+Type               ScheduleType       StartTime              Progress   State                  Volume                          
+----               ------------       ---------              --------   -----                  ------                          
+Optimization       Manual                                    0 %        Queued                 d:                  
+
+
+
+Configuring Deduplication via powershell:
+
+[SERVER2]: PS C:\> Get-WindowsFeature *dedup*
+Display Name                                            Name                       Install State
+------------                                            ----                       -------------
+        [ ] Data Deduplication                          FS-Data-Deduplication          Available
+		
+	
+[SERVER2]: PS C:\> Install-WindowsFeature -Name FS-Data-Deduplication -IncludeAllSubFeature -IncludeManagementTools
+
+Success Restart Needed Exit Code      Feature Result                               
+------- -------------- ---------      --------------                               
+True    No             Success        {Data Deduplication}                         
+
+
+
+[SERVER2]: PS C:\> Get-WindowsFeature *dedup*
+
+Display Name                                            Name                       Install State
+------------                                            ----                       -------------
+        [X] Data Deduplication                          FS-Data-Deduplication          Installed
+
+		
+[SERVER2]: PS C:\> Enable-DedupVolume -Volume d: -UsageType Default
+
+Enabled            UsageType          SavedSpace           SavingsRate          Volume                                                                            
+-------            ---------          ----------           -----------          ------                                                                            
+True               Default            0 B                  0 %                  D:           
+
+
+[SERVER2]: PS C:\> Set-DedupVolume -Volume d: -MinimumFileAgeDays 0
+
+To get scheduled job for dedup....
+[SERVER2]: PS C:\> Get-Command -Noun dedupschedule
+
+CommandType     Name                                               Version    Source                                                                              
+-----------     ----                                               -------    ------                                                                              
+Function        Get-DedupSchedule                                  2.0.0.0    Deduplication                                                                       
+Function        New-DedupSchedule                                  2.0.0.0    Deduplication                                                                       
+Function        Remove-DedupSchedule                               2.0.0.0    Deduplication                                                                       
+Function        Set-DedupSchedule                                  2.0.0.0    Deduplication                                                                       
+
+
+[SERVER2]: PS C:\> Get-DedupSchedule
+
+Enabled    Type               StartTime              Days               Name                                                                                      
+-------    ----               ---------              ----               ----                                                                                      
+True       Optimization                                                 BackgroundOptimization                                                                    
+True       GarbageCollection  02:45                  Saturday           WeeklyGarbageCollection                                                                   
+True       Scrubbing          03:45                  Saturday           WeeklyScrubbing                                                                           
+
+
+[SERVER1]: PS C:\> Get-DedupStatus
+
+FreeSpace    SavedSpace   OptimizedFiles     InPolicyFiles      Volume                                                         
+---------    ----------   --------------     -------------      ------                                                         
+37.71 GB     1.89 GB      4                  4                  D:                                                             
+
+
+[SERVER1]: PS C:\> Get-Command -Module Deduplication
+
+CommandType     Name                                               Version    Source                                           
+-----------     ----                                               -------    ------                                           
+Function        Disable-DedupVolume                                2.0.0.0    Deduplication                                    
+Function        Enable-DedupVolume                                 2.0.0.0    Deduplication                                    
+Function        Expand-DedupFile                                   2.0.0.0    Deduplication                                    
+Function        Get-DedupJob                                       2.0.0.0    Deduplication                                    
+Function        Get-DedupMetadata                                  2.0.0.0    Deduplication                                    
+Function        Get-DedupSchedule                                  2.0.0.0    Deduplication                                    
+Function        Get-DedupStatus                                    2.0.0.0    Deduplication                                    
+Function        Get-DedupVolume                                    2.0.0.0    Deduplication                                    
+Function        Measure-DedupFileMetadata                          2.0.0.0    Deduplication                                    
+Function        New-DedupSchedule                                  2.0.0.0    Deduplication                                    
+Function        Remove-DedupSchedule                               2.0.0.0    Deduplication                                    
+Function        Set-DedupSchedule                                  2.0.0.0    Deduplication                                    
+Function        Set-DedupVolume                                    2.0.0.0    Deduplication                                    
+Function        Start-DedupJob                                     2.0.0.0    Deduplication                                    
+Function        Stop-DedupJob                                      2.0.0.0    Deduplication                                    
+Function        Update-DedupStatus                                 2.0.0.0    Deduplication                   
+
+
+stop deduplication job: This will create duplicates back as the data was before this ran. Space will be required or job will fail.
+
+[SERVER1]: PS C:\> Start-DedupJob -Type Unoptimization -Volume d:
+
+Type               ScheduleType       StartTime              Progress   State                  Volume                          
+----               ------------       ---------              --------   -----                  ------                          
+Unoptimization     Manual                                    0 %        Queued                 d:               
