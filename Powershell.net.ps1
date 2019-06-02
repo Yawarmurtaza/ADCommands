@@ -254,5 +254,238 @@ WINRM-HTTP-In-TCP                                Public  Block
 WINRM-HTTP-Compat-In-TCP-NoScope                 Domain  Allow
 WINRM-HTTP-Compat-In-TCP                Private, Public  Allow
 
+#
+# INVOKE COMMAND
+#
+
+PS C:\Users\yawar> $v = Invoke-Command -ScriptBlock {
+
+Get-Item HKLM:\SYSTEM\CurrentControlSet\Control\BitlockerStatus
 
 
+
+
+} -ComputerName server1
+
+PS C:\Users\yawar> $v
+
+
+    Hive: HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control
+
+
+Name                           Property                                                                    PSComputerName                                                             
+----                           --------                                                                    --------------                                                             
+BitlockerStatus                BootStatus : 0                                                              server1                                                                    
+
+
+
+PS C:\Users\yawar> $v | Get-Member
+
+
+   TypeName: Deserialized.Microsoft.Win32.RegistryKey
+
+Name               MemberType   Definition                                                                                                                                            
+----               ----------   ----------                                                                                                                                            
+ToString           Method       string ToString(), string ToString(string format, System.IFormatProvider formatProvider), string IFormattable.ToString(string format, System.IForma...
+Property           NoteProperty Deserialized.System.String[] Property=BootStatus                                                                                                      
+PSChildName        NoteProperty string PSChildName=BitlockerStatus                                                                                                                    
+PSComputerName     NoteProperty string PSComputerName=server1                                                                                                                         
+PSDrive            NoteProperty Deserialized.System.Management.Automation.PSDriveInfo PSDrive=HKLM                                                                                    
+PSIsContainer      NoteProperty bool PSIsContainer=True                                                                                                                               
+PSParentPath       NoteProperty string PSParentPath=Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control                                           
+PSPath             NoteProperty string PSPath=Microsoft.PowerShell.Core\Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\BitlockerStatus                                 
+PSProvider         NoteProperty Deserialized.System.Management.Automation.ProviderInfo PSProvider=Microsoft.PowerShell.Core\Registry                                                  
+PSShowComputerName NoteProperty bool PSShowComputerName=True                                                                                                                          
+RunspaceId         NoteProperty guid RunspaceId=97563446-5db5-4004-9f7e-70cbdc49d1b4                                                                                                  
+Handle             Property     System.String {get;set;}                                                                                                                              
+Name               Property     System.String {get;set;}                                                                                                                              
+SubKeyCount        Property     System.Int32 {get;set;}                                                                                                                               
+ValueCount         Property     System.Int32 {get;set;}                                                                                                                               
+View               Property     System.String {get;set;}     
+
+
+
+
+PS C:\> Invoke-Command -ScriptBlock {
+Get-Process | SORT WS -Descending | SELECT -First 5
+} -ComputerName SERVER1, SERVER2 -Credential POWERSHELL\ADMINISTRATOR
+
+Handles  NPM(K)    PM(K)      WS(K)     CPU(s)     Id  SI ProcessName                                                    PSComputerName                                               
+-------  ------    -----      -----     ------     --  -- -----------                                                    --------------                                               
+   1075      39    96328     124060      14.63   3728   3 powershell                                                     SERVER2                                                      
+    576      27    60440      74628       0.67   3212   0 wsmprovhost                                                    SERVER2                                                      
+    583      21    42616      47904       1.95   1004   0 svchost                                                        SERVER2                                                      
+    390      56    97172      46932       8.33   1668   0 MsMpEng                                                        SERVER2                                                      
+   1190      42    16800      35480       6.39    840   0 svchost                                                        SERVER2                                                      
+   1038      36    94348     116104      12.17   1760   1 powershell                                                     SERVER1                                                      
+    475      54   121108      77124      10.22   1580   0 MsMpEng                                                        SERVER1                                                      
+    566      27    60412      74608       0.73   1372   0 wsmprovhost                                                    SERVER1                                                      
+    599      20    33204      42200       1.97   1004   0 svchost                                                        SERVER1                                                      
+   1211      43    16236      35568       6.95    436   0 svchost                                                        SERVER1             
+   
+   
+   
+
+PS C:\> $sessions = New-PSSession -ComputerName server1, server2, dc1
+
+PS C:\> $sessions
+
+ Id Name            ComputerName    ComputerType    State         ConfigurationName     Availability
+ -- ----            ------------    ------------    -----         -----------------     ------------
+  7 WinRM7          dc1             RemoteMachine   Opened        Microsoft.PowerShell     Available
+  5 WinRM5          server1         RemoteMachine   Opened        Microsoft.PowerShell     Available
+  6 WinRM6          server2         RemoteMachine   Opened        Microsoft.PowerShell     Available   
+  
+  
+  
+PS C:\> $sessionServer1 = Get-PSSession | where computername -EQ server1
+
+PS C:\> $sessionServer1
+
+ Id Name            ComputerName    ComputerType    State         ConfigurationName     Availability
+ -- ----            ------------    ------------    -----         -----------------     ------------
+  5 WinRM5          server1         RemoteMachine   Opened        Microsoft.PowerShell     Available
+  
+  
+  
+PS C:\> Invoke-Command {$x=100} -Session $sessionServer1
+
+PS C:\> Invoke-Command {$x+$X} -Session $sessionServer1
+200
+  
+PS C:\> Invoke-Command {Get-Service bits } -Session $sessions
+
+Status   Name               DisplayName                            PSComputerName                                                                                                     
+------   ----               -----------                            --------------                                                                                                     
+Stopped  bits               Background Intelligent Transfer Ser... dc1                                                                                                                
+Stopped  bits               Background Intelligent Transfer Ser... server2                                                                                                            
+Stopped  bits               Background Intelligent Transfer Ser... server1                                                                                                            
+
+
+PS C:\> $serverInfo = {
+$fileObject = New-Object -Com scripting.fileSystemObject
+$fileObject.drives | where drivetype -EQ 2 | select Path, 
+@{name="sizeGB";Expression={$_.totalsize/1gb -as [int]}},
+@{name="freeGB";Expression={$_.freespace/1gb}},
+@{name="availGB";Expression={$_.availableSptaceGB/1gb}},
+@{name="computername";Expression={$env:omputerName}}
+
+}
+
+PS C:\> $serverInfo = {
+
+$fileObject = New-Object -Com scripting.fileSystemObject
+$fileObject.drives | where drivetype -EQ 2 | select Path, 
+@{name="sizeGB";Expression={$_.totalsize/1gb -as [int]}},
+@{name="freeGB";Expression={$_.freespace/1gb}},
+@{name="availGB";Expression={$_.availableSptaceGB/1gb}},
+@{name="computername";Expression={$env:computerName}}
+
+}
+
+
+
+PS C:\> Invoke-Command -ScriptBlock $serverInfo -Session $sessions
+
+
+Path           : C:
+sizeGB         : 19
+freeGB         : 11.6613159179688
+availGB        : 0
+computername   : 
+PSComputerName : dc1
+RunspaceId     : 2b29f6c2-48d5-4939-a0ae-0cca02782c98
+
+Path           : C:
+sizeGB         : 14
+freeGB         : 7.67639541625977
+availGB        : 0
+computername   : 
+PSComputerName : server2
+RunspaceId     : 2f1534fd-5965-47e5-8ecb-cd7127ce6504
+
+Path           : C:
+sizeGB         : 14
+freeGB         : 7.5555305480957
+availGB        : 0
+computername   : 
+PSComputerName : server1
+RunspaceId     : ad11ac4a-b2eb-4951-af95-b86ba5472630
+
+
+
+
+PS C:\> Invoke-Command -ScriptBlock $serverInfo -Session $sessions | ft
+
+Path sizeGB           freeGB availGB computername PSComputerName RunspaceId                          
+---- ------           ------ ------- ------------ -------------- ----------                          
+C:       19 11.6613159179688       0              dc1            2b29f6c2-48d5-4939-a0ae-0cca02782c98
+C:       14 7.67639541625977       0              server2        2f1534fd-5965-47e5-8ecb-cd7127ce6504
+C:       14  7.5555305480957       0              server1        ad11ac4a-b2eb-4951-af95-b86ba5472630
+
+
+PS C:\> Invoke-Command -ScriptBlock $serverInfo -Session $sessions -HideComputerName | Select-Object * -ExcludeProperty runspaceid | ft
+
+Path sizeGB           freeGB availGB computername
+---- ------           ------ ------- ------------
+C:       19 11.6613159179688       0 DC1         
+C:       14 7.67639541625977       0 SERVER2     
+C:       14 7.55546951293945       0 SERVER1     
+
+
+# Remove sessions:
+
+PS C:\> Remove-PSSession -Session $sessions
+
+
+#
+#   For a non domain computer 
+#
+
+PS C:\> Invoke-Command {Get-Service } -computername server3
+
+
+#ERROR:
+PS C:\> Test-WSMan -ComputerName server3 -Credential $cred -Authentication Negotiate
+# Test-WSMan : <f:WSManFault xmlns:f="http://schemas.microsoft.com/wbem/wsman/1/wsmanfault" Code="1312" Machine="WIN-10-Client.Powershell.net"><f:Message>WinRM cannot process the 
+# request. The following error with error code 0x8009030e occurred while using Negotiate authentication: A specified logon session does not exist. It may already have been terminated. 
+ 
+ # This can occur if the provided credentials are not valid on the target server, or if the server identity could not be verified.  If you trust the server identity, add the server 
+# name to the TrustedHosts list, and then retry the request. Use winrm.cmd to view or edit the TrustedHosts list. Note that computers in the TrustedHosts list might not be 
+# authenticated. For more information about how to edit the TrustedHosts list, run the following command: winrm help config. </f:Message></f:WSManFault>
+# At line:1 char:1
+# + Test-WSMan -ComputerName server3 -Credential $cred -Authentication Ne ...
+# + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # + CategoryInfo          : InvalidOperation: (server3:String) [Test-WSMan], InvalidOperationException
+    # + FullyQualifiedErrorId : WsManError,Microsoft.WSMan.Management.TestWSManCommand
+ 
+# Reason: WSman needs to have a way to verify that the server name is who it says it is. In this case its Server3 
+
+PS C:\> Get-Item -Path WSMan:\localhost\Client\TrustedHosts
+
+
+   WSManConfig: Microsoft.WSMan.Management\WSMan::localhost\Client
+
+Type            Name                           SourceOfValue   Value                                                                                                                  
+----            ----                           -------------   -----                                                                                                                  
+System.String   TrustedHosts                        
+
+
+
+PS C:\> Test-WSMan -ComputerName server3 -Credential $cred -Authentication Negotiate
+
+
+wsmid           : http://schemas.dmtf.org/wbem/wsman/identity/1/wsmanidentity.xsd
+ProtocolVersion : http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd
+ProductVendor   : Microsoft Corporation
+ProductVersion  : OS: 10.0.14393 SP: 0.0 Stack: 3.0
+
+
+PS C:\> Invoke-Command {Get-Service -Name WinRM } -computername server3 -Credential $cred
+
+Status   Name               DisplayName                            PSComputerName                                                                                                     
+------   ----               -----------                            --------------                                                                                                     
+Running  WinRM              Windows Remote Management (WS-Manag... server3    
+
+
+  
