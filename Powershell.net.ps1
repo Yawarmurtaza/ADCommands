@@ -487,5 +487,94 @@ Status   Name               DisplayName                            PSComputerNam
 ------   ----               -----------                            --------------                                                                                                     
 Running  WinRM              Windows Remote Management (WS-Manag... server3    
 
+#========================================================================================================================
+#														Windows Management Instrumentation (WMI)
+#========================================================================================================================
 
+
+PS C:\> Get-WmiObject -Class win32_operatingsystem -List
+
+PS C:\> $servers = "dc1", "server1", "server2", "workpc"
+
+PS C:\> Get-WmiObject -Class win32_operatingsystem -ComputerName $servers | select __server, caption, OSarchitecture, installdate | ft
+
+__SERVER caption                                             OSarchitecture installdate              
+-------- -------                                             -------------- -----------              
+DC1      Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035935.000000+060
+SERVER1  Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035707.000000+060
+SERVER2  Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035735.000000+060
+
+
+PS C:\> Get-WmiObject -Class win32_operatingsystem -ComputerName $servers | select __server, caption, OSarchitecture, installdate,servicepackmajorversion,
+ @{name="Installed"; expression={$_.ConvertoDatetime($_.InstallDate)}} | ft
+
+__SERVER caption                                             OSarchitecture installdate               servicepackmajorversion Installed
+-------- -------                                             -------------- -----------               ----------------------- ---------
+DC1      Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035935.000000+060                       0          
+SERVER1  Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035707.000000+060                       0          
+SERVER2  Microsoft Windows Server 2016 Datacenter Evaluation 64-bit         20190530035735.000000+060                       0         
+
+
+PS C:\> Get-WmiObject win32_process -ComputerName server2 | select *  | ft
+
+PSComputerName ProcessName         Handles            VM       WS Path                              __GENUS __CLASS       __SUPERCLASS __DYNASTY               
+-------------- -----------         -------            --       -- ----                              ------- -------       ------------ ---------               
+SERVER2        System Idle Process       0         65536     4096                                         2 Win32_Process CIM_Process  CIM_ManagedSystemElement
+SERVER2        System                  733       3567616   131072                                         2 Win32_Process CIM_Process  CIM_ManagedSystemElement
+SERVER2        smss.exe                 54 2199029915648  1212416                                         2 Win32_Process CIM_Process  CIM_ManagedSystemElement
+SERVER2        csrss.exe               202 2199072215040  4313088                                         2 Win32_Process CIM_Process  CIM_ManagedSystemElement
+# this list is all the processes on server2
+
+
+PS C:\> Get-WmiObject win32_process -ComputerName server2 | Where-Object {$_.name -eq "lsass.exe"} | ft
+
+__GENUS __CLASS       __SUPERCLASS __DYNASTY                __RELPATH                  __PROPERTY_COUNT __DERIVATION                                                __SERVER __NAMESP
+                                                                                                                                                                             ACE     
+------- -------       ------------ ---------                ---------                  ---------------- ------------                                                -------- --------
+      2 Win32_Process CIM_Process  CIM_ManagedSystemElement Win32_Process.Handle="648"               45 {CIM_Process, CIM_LogicalElement, CIM_ManagedSystemElement} SERVER2  root\...
+
+	  
+
+# WITH SELECT QUERY ... THIS WILL RUN ON THE TARGET SERVER 	AND WILL RETURN ON THE RESULT OF SELECT QUERY:
+
+PS C:\> Get-WmiObject -ComputerName "server2" -Query "SELECT * FROM WIN32_PROCESS WHERE NAME = 'LSASS.EXE'" | FT
+
+__GENUS __CLASS       __SUPERCLASS __DYNASTY                __RELPATH                  __PROPERTY_COUNT __DERIVATION                                                __SERVER __NAMESP
+                                                                                                                                                                             ACE     
+------- -------       ------------ ---------                ---------                  ---------------- ------------                                                -------- --------
+      2 Win32_Process CIM_Process  CIM_ManagedSystemElement Win32_Process.Handle="648"               45 {CIM_Process, CIM_LogicalElement, CIM_ManagedSystemElement} SERVER2  root\...
+	  
+	  
+	  
+PS C:\> Get-WmiObject win32_logicaldisk -Filter "deviceid='c:'" -ComputerName $servers -Credential $cred | select * | ft
+
+PSComputerName Status Availability DeviceID StatusInfo __GENUS __CLASS           __SUPERCLASS    __DYNASTY                __RELPATH                      
+-------------- ------ ------------ -------- ---------- ------- -------           ------------    ---------                ---------                      
+DC1                                C:                        2 Win32_LogicalDisk CIM_LogicalDisk CIM_ManagedSystemElement Win32_LogicalDisk.DeviceID="C:"
+SERVER1                            C:                        2 Win32_LogicalDisk CIM_LogicalDisk CIM_ManagedSystemElement Win32_LogicalDisk.DeviceID="C:"
+SERVER2                            C:                        2 Win32_LogicalDisk CIM_LogicalDisk CIM_ManagedSystemElement Win32_LogicalDisk.DeviceID="C:"
+
+
+PS C:\> Get-WmiObject win32_logicaldisk -Filter "deviceid='c:'" -ComputerName $servers -Credential $cred | select pscomputername, caption, 
+@{name="sizegb";expression={($_.sezegb / 1gb)}}, @{name="freegb";express={($_.freespace/1gb)}}, @{name="pctfree";express={($_.freespace/$_.size)*100}}, 
+@{name="Total";expression={$_.size/1gb}}  | ft 
+
+PSComputerName caption sizegb           freegb          pctfree            Total
+-------------- ------- ------           ------          -------            -----
+DC1            C:           0 11.6539916992188 59.9291409681217 19.4462852478027
+SERVER1        C:           0 7.54981231689453 52.2612712360975 14.4462852478027
+SERVER2        C:           0 7.67166519165039  53.104760566854 14.4462852478027
+
+
+# with credentials:	 
+
+PS C:\> Get-WmiObject win32_logicaldisk -Filter "deviceid='c:'" -ComputerName "server3" -Credential server3\administrator | select __server, @{Name="TotalSpace";expression={$_.Size/1gb}} | ft
+
+__SERVER       TotalSpace
+--------       ----------
+SERVER3  14.4462852478027
+
+
+# Windows Management Instrumentation - TEST TOOL: 
+# wbemtest
   
